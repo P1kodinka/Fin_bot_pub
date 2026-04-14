@@ -34,3 +34,24 @@ def get_confirmation_keyboard(student_id: int):
         InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")
     ]]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+kb_admin_menu = types.ReplyKeyboardMarkup(keyboard=[
+    [types.KeyboardButton(text="👥 Список пользователей")],
+    [types.KeyboardButton(text="🔙 В главное меню")]
+], resize_keyboard=True)
+
+async def generate_admin_users_keyboard():
+    from Database import get_all_users_summary
+    users = get_all_users_summary()
+    buttons = []
+    for user_id, count, hours, income in users:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"🆔 {user_id} | 👤 {count} уч.",
+                callback_data=f"admin_detail_{user_id}"
+            )
+        ])
+    if not buttons:
+        buttons.append([InlineKeyboardButton(text="Пользователей нет", callback_data="admin_noop")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

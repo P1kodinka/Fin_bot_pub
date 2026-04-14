@@ -2,7 +2,7 @@ from aiogram import F, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from kb import kb_main, kb_red_urok, kb_uch, generate_students_keyboard, get_confirmation_keyboard
+from kb import kb_main, kb_red_urok, kb_uch, generate_students_keyboard, get_confirmation_keyboard, kb_admin_menu, generate_admin_users_keyboard
 from Database import (
     get_all_students, get_weekly_report, update_hours_spend,
     delete_student, add_student, get_student_name
@@ -10,6 +10,11 @@ from Database import (
 from datetime import datetime
 
 msg = Dispatcher()
+
+ADMIN_ID = #Сюда ID
+
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
 
 class StudentState(StatesGroup):
     waiting_hours = State()
@@ -169,3 +174,56 @@ async def cancel_deletion(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("❌ Удаление отменено", reply_markup=kb_main)
     await callback.answer()
     await state.clear()
+
+@msg.message(Command('admin'))
+async def admin_command(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Доступ к админ-панели запрещён.")
+        return
+    await message.answer("🛠 Админ-панель:", reply_markup=kb_admin_menu)
+
+@msg.message(F.text == "👥 Список пользователей")
+async def admin_users_list(message: types.Message):
+    if not is_admin(message.from_user.id): return
+    keyboard = await generate_admin_users_keyboard()
+    await message.answer("Выберите пользователя для просмотра статистики:", reply_markup=keyboard)
+
+@msg.callback_query(F.data.startswith("admin_detail_"))
+async def admin_user_detail(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id): return
+    user_id = int(callback.data.split("_")[2])
+    from Database import get_user_detailed_stats
+    
+    summary, students = get_user_detailed_stats(user_id)
+    if not summary or summary[0] == 0:
+        await callback.answer("Нет данных")
+        return
+
+    total_students, total_hours, total_income = summary
+    text = f"👤 <b>Статистика пользователя {user_id}</b>:\n"
+    text += f"📚 Учеников: <b>{total_students}</b>\n"
+    text += f"⏱ Всего часов: <b>{total_hours:.1f}</b>\n"
+    text += f"💰 Общий доход: <b>{total_income:.2f} ₽</b>\n\n"
+    text += "📋 <b>Детализация по ученикам:</b>\n"
+
+    for s_id, name, price, hours, income in students:
+        text += f"• <i>{name}</i> | {hours:.1f}ч | {income:.2f}₽\n"
+
+    kb_back = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🔙 Назад к списку", callback_data="admin_back_to_list")
+    ]])
+
+    await callback.message.answer(text, reply_markup=kb_back, parse_mode="HTML")
+    await callback.answer()
+
+@msg.callback_query(F.data == "admin_back_to_list")
+async def admin_back_to_list(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id): return
+    keyboard = await generate_admin_users_keyboard()
+    await callback.message.edit_text("Выберите пользователя:", reply_markup=keyboard)
+    await callback.answer()
+
+@msg.message(F.text == "🔙 В главное меню")
+async def admin_back_to_main(message: types.Message):
+    if not is_admin(message.from_user.id): return
+    await message.answer("Главное меню:", reply_markup=kb_main)

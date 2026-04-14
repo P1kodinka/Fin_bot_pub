@@ -94,3 +94,44 @@ def add_student(user_id: int, name: str, price: float, hours: float = 0):
                    (user_id, name, price, hours))
     con.commit()
     con.close()
+
+
+def get_all_users_summary():
+    """Возвращает список всех пользователей с общей статистикой."""
+    con = get_connection()
+    cursor = con.cursor()
+    cursor.execute('''
+        SELECT user_id,
+               COUNT(id) as student_count,
+               COALESCE(SUM(hours_spend), 0) as total_hours,
+               COALESCE(SUM(hours_spend * price_per_hour), 0) as total_income
+        FROM Ucheniks
+        GROUP BY user_id
+        ORDER BY total_income DESC
+    ''')
+    users = cursor.fetchall()
+    con.close()
+    return users
+
+def get_user_detailed_stats(user_id: int):
+    """Возвращает подробную статистику по конкретному пользователю."""
+    con = get_connection()
+    cursor = con.cursor()
+    # Общая сводка
+    cursor.execute('''
+        SELECT COUNT(id) as student_count,
+               COALESCE(SUM(hours_spend), 0) as total_hours,
+               COALESCE(SUM(hours_spend * price_per_hour), 0) as total_income
+        FROM Ucheniks WHERE user_id = ?
+    ''', (user_id,))
+    summary = cursor.fetchone()
+
+    # Детализация по ученикам
+    cursor.execute('''
+        SELECT id, uchenik, price_per_hour, hours_spend, (hours_spend * price_per_hour) as income
+        FROM Ucheniks WHERE user_id = ?
+        ORDER BY hours_spend DESC
+    ''', (user_id,))
+    students = cursor.fetchall()
+    con.close()
+    return summary, students
